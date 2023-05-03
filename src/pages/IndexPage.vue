@@ -5,18 +5,20 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 const $q = useQuasar()
 
-if (!window.isCallbackRegistered.handleStartStopRecording) {
-  window.electronAPI.handleStartStopRecording(() => {
-    clickRecord()
-  })
-  window.isCallbackRegistered.handleStartStopRecording = true
-}
+if (window.electronAPI != null) {
+  if (!window.isCallbackRegistered.handleStartStopRecording) {
+    window.electronAPI.handleStartStopRecording(() => {
+      clickRecord()
+    })
+    window.isCallbackRegistered.handleStartStopRecording = true
+  }
 
-if (!window.isCallbackRegistered.handleOpenSettings) {
-  window.electronAPI.handleOpenSettings(() => {
-    showSettings.value = true
-  })
-  window.isCallbackRegistered.handleOpenSettings = true
+  if (!window.isCallbackRegistered.handleOpenSettings) {
+    window.electronAPI.handleOpenSettings(() => {
+      showSettings.value = true
+    })
+    window.isCallbackRegistered.handleOpenSettings = true
+  }
 }
 
 interface Message {type: string, content: string}
@@ -75,7 +77,9 @@ onMounted(() => {
   document.addEventListener('keydown', handleShortcuts)
 
   settings.value = readSettings()
-  registerGlobalShortcut()
+  if (window.electronAPI != null) {
+    registerGlobalShortcut()
+  }
 
   connectionRetrier = window.setInterval(() => {
     if (!isConnected.value) {
