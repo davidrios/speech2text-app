@@ -1,6 +1,7 @@
-import { app, BrowserWindow, nativeTheme, Menu, ipcMain, IpcMainInvokeEvent, globalShortcut, nativeImage, Tray } from 'electron'
+import { app, BrowserWindow, nativeTheme, Menu, ipcMain, IpcMainInvokeEvent, globalShortcut } from 'electron'
 import path from 'path'
 import os from 'os'
+import fs from 'fs'
 
 // needed in case process is undefined under Linux
 const platform = process.platform || os.platform()
@@ -16,6 +17,12 @@ try {
 let mainWindow: BrowserWindow | undefined
 
 function createWindow () {
+  const statePath = path.join(app.getPath('userData'), 'window-state.json')
+  let state: Record<string, unknown> = {}
+  try {
+    state = JSON.parse(fs.readFileSync(statePath, 'utf8'))
+  } catch (e) {
+  }
   /**
    * Initial window options
    */
@@ -24,6 +31,7 @@ function createWindow () {
     width: 1000,
     height: 600,
     useContentSize: true,
+    autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
       // More info: https://v2.quasar.dev/quasar-cli-vite/developing-electron-apps/electron-preload-script
@@ -32,6 +40,10 @@ function createWindow () {
   })
 
   mainWindow.loadURL(process.env.APP_URL)
+
+  if (state.bounds != null) {
+    mainWindow.setBounds(state.bounds)
+  }
 
   if (process.env.DEBUGGING) {
     // if on DEV or Production with debug enabled
@@ -109,6 +121,19 @@ function createWindow () {
 
   const menu = Menu.buildFromTemplate(template as any)
   Menu.setApplicationMenu(menu)
+
+  mainWindow.on('resize', saveBoundsSoon)
+  mainWindow.on('move', saveBoundsSoon)
+  let saveBoundsCookie: any
+
+  function saveBoundsSoon () {
+    if (saveBoundsCookie) clearTimeout(saveBoundsCookie)
+    saveBoundsCookie = setTimeout(() => {
+      saveBoundsCookie = undefined
+      state.bounds = mainWindow?.getBounds()
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2))
+    }, 1000)
+  }
 }
 
 app.whenReady().then(() => {
