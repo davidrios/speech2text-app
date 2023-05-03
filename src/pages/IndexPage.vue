@@ -31,6 +31,32 @@ const isConnected = ref(false)
 let ws: WebSocket
 const received: Message[] = []
 
+function readSettings (): Settings {
+  return JSON.parse(localStorage.getItem('settings') ?? 'null') || {
+    serverAddress: 'localhost:9748',
+    isTls: false,
+    autoCopy: false
+  }
+}
+
+function connect () {
+  if (ws != null) {
+    ws.close()
+  }
+
+  ws = new WebSocket(`${settings.value.isTls ? 'wss' : 'ws'}://${settings.value.serverAddress}/api/transcribe`)
+  ws.onopen = () => {
+    isConnected.value = true
+  }
+  ws.onclose = () => {
+    isConnected.value = false
+  }
+
+  ws.onmessage = function (event) {
+    received.push(JSON.parse(event.data))
+  }
+}
+
 function handleShortcuts (event: KeyboardEvent) {
   if (event.ctrlKey && event.code === 'KeyS') {
     event.preventDefault()
@@ -42,35 +68,25 @@ function handleShortcuts (event: KeyboardEvent) {
   }
 }
 
-function readSettings (): Settings {
-  return JSON.parse(localStorage.getItem('settings') ?? 'null') || {
-    serverAddress: 'localhost:9748',
-    isTls: false,
-    autoCopy: false
-  }
-}
-
+let connectionRetrier: number
 onMounted(() => {
-  ws = new WebSocket(`${settings.value.isTls ? 'wss' : 'ws'}://${settings.value.serverAddress}/api/transcribe`)
-  ws.onopen = () => {
-    isConnected.value = true
-  }
-  ws.onclose = () => {
-    isConnected.value = true
-  }
-
-  ws.onmessage = function (event) {
-    received.push(JSON.parse(event.data))
-  }
+  connect()
 
   document.addEventListener('keydown', handleShortcuts)
 
   settings.value = readSettings()
   registerGlobalShortcut()
+
+  connectionRetrier = window.setInterval(() => {
+    if (!isConnected.value) {
+      connect()
+    }
+  }, 3000)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleShortcuts)
+  clearInterval(connectionRetrier)
 })
 
 const isShortcutValid = ref(false)
@@ -125,6 +141,16 @@ async function registerGlobalShortcut () {
   }
 }
 
+const settings = ref<Settings>(readSettings())
+
+function saveSettings () {
+  const currentSettings = readSettings()
+  localStorage.setItem('settings', JSON.stringify(settings.value))
+  if (currentSettings.serverAddress !== settings.value.serverAddress || currentSettings.isTls !== settings.value.isTls) {
+    connect()
+  }
+}
+
 async function receiveNext (): Promise<Message> {
   while (true) {
     if (received.length > 0) {
@@ -136,12 +162,6 @@ async function receiveNext (): Promise<Message> {
 
   const message = received.pop() as Message
   return message
-}
-
-const settings = ref<Settings>(readSettings())
-
-function saveSettings () {
-  localStorage.setItem('settings', JSON.stringify(settings.value))
 }
 
 const responseHistory = ref<string[]>(JSON.parse(localStorage.getItem('history') ?? '[]'))
@@ -314,7 +334,7 @@ function clickRecord () {
           </div>
         </q-card-section>
 
-        <q-card-section class="q-pt-none">
+        <q-card-section class="q-pt-none q-col-gutter-sm">
           <q-input
             v-model="settings.serverAddress"
             dense
@@ -336,6 +356,7 @@ function clickRecord () {
             v-model="settings.globalShortcut"
             label="Global start/stop voice recording shortcut"
             clearable
+            dense
             @keydown="onShortcutSettingsKeyDown"
             @keyup="onShortcutSettingsKeyUp"
           />
@@ -365,56 +386,75 @@ function clickRecord () {
         filled
       />
     </div>
-    <div class="row q-pt-xs fit">
+    <div class="row q-pt-sm fit">
       <div class="col-6">
-        <q-btn
-          icon="content_copy"
-          dense
-          @click="copyText"
-        />
-        <q-btn
-          class="q-mx-xs"
-          icon="navigate_before"
-          dense
-          :disable="currentPosition <= 0"
-          @click="showPrevious"
-        />
-        <q-btn
-          icon="navigate_next"
-          dense
-          :disable="currentPosition >= responseHistory.length - 1"
-          @click="showNext"
-        />
-        <q-btn
-          class="q-mx-xs"
-          icon="settings"
-          dense
-          @click="showSettings = true"
-        />
+        <div class="row q-col-gutter-xs">
+          <div>
+            <q-btn
+              icon="content_copy"
+              dense
+              @click="copyText"
+            />
+          </div>
+          <div>
+            <q-btn
+              icon="navigate_before"
+              dense
+              :disable="currentPosition <= 0"
+              @click="showPrevious"
+            />
+          </div>
+          <div>
+            <q-btn
+              icon="navigate_next"
+              dense
+              :disable="currentPosition >= responseHistory.length - 1"
+              @click="showNext"
+            />
+          </div>
+          <div>
+            <q-btn
+              icon="settings"
+              dense
+              @click="showSettings = true"
+            />
+          </div>
+        </div>
       </div>
-      <div class="col-6 text-right">
-        <q-btn
-          class="q-mx-xs"
-          icon="upload_file"
-          dense
-          :loading="isLoading"
-          :disable="!isConnected"
-          @click="uploadAudio"
-        />
-        <q-btn
-          color="primary"
-          dense
-          :loading="isLoading"
-          :disable="!isConnected"
-          @click="clickRecord"
-        >
-          <q-spinner-bars v-if="isRecording" />
-          <q-icon
-            v-else
-            name="record_voice_over"
-          />
-        </q-btn>
-        <!-- <q-btn label="Process" color="primary" @click="process" :disable="!isConnected || !audioFile" :loading="isLoading" /> -->
+      <div class="col-6">
+        <div class="row q-col-gutter-xs justify-end">
+          <div>
+            <q-chip
+              :color="isConnected ? 'green' : undefined"
+              :text-color="isConnected ? 'white' : undefined"
+            >
+              {{ isConnected ? 'online' : 'offline' }}
+            </q-chip>
+          </div>
+          <div>
+            <q-btn
+              icon="upload_file"
+              dense
+              :loading="isLoading"
+              :disable="!isConnected"
+              @click="uploadAudio"
+            />
+          </div><div>
+            <q-btn
+              color="primary"
+              dense
+              :loading="isLoading"
+              :disable="!isConnected"
+              @click="clickRecord"
+            >
+              <q-spinner-bars v-if="isRecording" />
+              <q-icon
+                v-else
+                name="record_voice_over"
+              />
+            </q-btn>
+          </div>
+        </div>
       </div>
     </div>
   </q-page>

@@ -146,7 +146,6 @@ app.whenReady().then(() => {
 
   ipcMain.handle('register-global-shortcut',
     async (event: IpcMainInvokeEvent, shortcutString: string | null) => {
-      console.log('requested register shortcut', shortcutString)
       globalShortcut.unregisterAll()
 
       if (shortcutString == null || shortcutString.length === 0) {
@@ -156,7 +155,6 @@ app.whenReady().then(() => {
       const parts = shortcutString.split('+')
       const mainKey = parts.pop() as string
       if (!/[A-Z0-9]|F([1-9]|1[0-9])/.test(mainKey)) {
-        console.log('invalid main key')
         return false
       }
 
@@ -173,15 +171,13 @@ app.whenReady().then(() => {
 
       acceleratorParts.push(mainKey)
 
-      console.log('registering', acceleratorParts.join('+'))
-
       const res = globalShortcut.register(acceleratorParts.join('+'), () => {
         // todo: maybe later
         console.log('shortcut pressed')
       })
 
       if (!res) {
-        console.log('error registering')
+        console.log('error registering', acceleratorParts.join('+'))
       }
 
       return res
