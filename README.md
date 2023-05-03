@@ -3,6 +3,15 @@
 A simple application meant to be used to help input text by voice. This is a client for
 [speech2text-server](https://github.com/davidrios/speech2text-server).
 
+Screenshot:
+
+![app window](./docs/app-window.png)
+
+
+There's a compiled version at: https://davidrios.github.io/speech2text-app/. Note that 
+because it's served from a real domain with HTTPS, this version can only connect to
+TLS secured addresses or `localhost`.
+
 
 ## Development
 
